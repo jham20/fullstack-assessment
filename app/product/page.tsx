@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { ImageWithFallback } from '@/components/ui/image-with-fallback';
 
 interface Product {
   stacklineSku: string;
@@ -17,26 +17,48 @@ interface Product {
   imageUrls: string[];
   featureBullets: string[];
   retailerSku: string;
+  retailPrice: number;
 }
 
 export default function ProductPage() {
   const searchParams = useSearchParams();
-  const productParam = searchParams.get('product');
+  const sku = searchParams.get('sku');
   const [product, setProduct] = useState<Product | null>(null);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (productParam) {
-      try {
-        const parsedProduct = JSON.parse(productParam);
-        setProduct(parsedProduct);
-      } catch (error) {
-        console.error('Failed to parse product data:', error);
-      }
+    if (sku) {
+      setLoading(true);
+      setError(null);
+      
+      fetch(`/api/products/${encodeURIComponent(sku)}`)
+        .then((res) => {
+          if (!res.ok) {
+            if (res.status === 404) {
+              throw new Error('Product not found');
+            }
+            throw new Error(`Failed to fetch product: ${res.status}`);
+          }
+          return res.json();
+        })
+        .then((data) => {
+          setProduct(data);
+          setLoading(false);
+        })
+        .catch((error) => {
+          console.error('Error fetching product:', error);
+          setError(error.message || 'Failed to load product');
+          setLoading(false);
+        });
+    } else {
+      setError('No product SKU provided');
+      setLoading(false);
     }
-  }, [productParam]);
+  }, [sku]);
 
-  if (!product) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8">
@@ -47,7 +69,27 @@ export default function ProductPage() {
             </Button>
           </Link>
           <Card className="p-8">
-            <p className="text-center text-muted-foreground">Product not found</p>
+            <p className="text-center text-muted-foreground">Loading product...</p>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <Link href="/">
+            <Button variant="ghost" className="mb-4">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Products
+            </Button>
+          </Link>
+          <Card className="p-8">
+            <p className="text-center text-muted-foreground">
+              {error || 'Product not found'}
+            </p>
           </Card>
         </div>
       </div>
@@ -69,16 +111,14 @@ export default function ProductPage() {
             <Card className="overflow-hidden">
               <CardContent className="p-0">
                 <div className="relative h-96 w-full bg-muted">
-                  {product.imageUrls[selectedImage] && (
-                    <Image
-                      src={product.imageUrls[selectedImage]}
-                      alt={product.title}
-                      fill
-                      className="object-contain p-8"
-                      sizes="(max-width: 1024px) 100vw, 50vw"
-                      priority
-                    />
-                  )}
+                  <ImageWithFallback
+                    src={product.imageUrls[selectedImage]}
+                    alt={product.title}
+                    fill
+                    className="object-contain p-8"
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                    priority
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -93,7 +133,7 @@ export default function ProductPage() {
                       selectedImage === idx ? 'border-primary' : 'border-muted'
                     }`}
                   >
-                    <Image
+                    <ImageWithFallback
                       src={url}
                       alt={`${product.title} - Image ${idx + 1}`}
                       fill
@@ -113,6 +153,11 @@ export default function ProductPage() {
                 <Badge variant="outline">{product.subCategoryName}</Badge>
               </div>
               <h1 className="text-3xl font-bold mb-2">{product.title}</h1>
+              <div className="mb-3">
+                <p className="text-2xl font-bold text-primary">
+                  ${product.retailPrice.toFixed(2)}
+                </p>
+              </div>
               <p className="text-sm text-muted-foreground">SKU: {product.retailerSku}</p>
             </div>
 
